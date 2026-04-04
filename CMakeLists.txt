@@ -47,3 +47,5 @@ target_compile_options(nemac PRIVATE
 
 install(TARGETS nemac DESTINATION bin)
 install(DIRECTORY assets/wallpapers/ DESTINATION share/nemac/wallpapers)
+
+add_subdirectory(panel)
