@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 REPO="lyrka-meow/Nemac"
 INSTALL_DIR="/usr/local/bin"
@@ -9,6 +8,14 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(eval echo "~${REAL_USER}")
+
+die() {
+    echo -e "${RED}$1${NC}" >&2
+    exit 1
+}
 
 banner() {
     echo -e "${CYAN}${BOLD}"
@@ -21,25 +28,29 @@ banner() {
     echo -e "${NC}"
 }
 
+check_root() {
+    [ "$(id -u)" -eq 0 ] || die "Запустите с sudo"
+}
+
 check_arch() {
-    if [ ! -f /etc/arch-release ]; then
-        echo -e "${RED}Nemac поддерживает только Arch Linux${NC}"
-        exit 1
-    fi
+    [ -f /etc/arch-release ] || die "Nemac поддерживает только Arch Linux"
 }
 
 install_deps() {
     echo -e "${CYAN}Установка зависимостей...${NC}"
-    sudo pacman -S --needed --noconfirm \
+    if ! pacman -S --needed --noconfirm \
         xorg-server xorg-xinit xorg-xrandr \
         libx11 libxcomposite libxdamage libxfixes libxinerama libxft \
         glew mesa imlib2 dbus \
         qt6-base qt6-declarative \
-        curl git base-devel cmake
+        curl > /dev/null 2>&1; then
+        die "Не удалось установить зависимости. Проверьте зеркала pacman"
+    fi
+    echo -e "${GREEN}Зависимости установлены${NC}"
 }
 
 install_from_release() {
-    echo -e "${CYAN}Загрузка последнего релиза...${NC}"
+    echo -e "${CYAN}Загрузка Nemac...${NC}"
     local api_resp
     api_resp=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || true
 
@@ -48,54 +59,41 @@ install_from_release() {
     panel_url=$(echo "$api_resp" | grep '"browser_download_url".*nemac-panel"' | head -1 | cut -d'"' -f4)
 
     if [ -z "$nemac_url" ]; then
-        echo -e "${CYAN}Релиз не найден, сборка из исходников...${NC}"
-        install_from_source
-        return
+        die "Релиз не найден. Проверьте https://github.com/${REPO}/releases"
     fi
 
-    curl -fsSL -o /tmp/nemac "$nemac_url"
+    if ! curl -fsSL -o /tmp/nemac "$nemac_url"; then
+        die "Не удалось скачать nemac"
+    fi
     chmod +x /tmp/nemac
-    sudo cp /tmp/nemac "${INSTALL_DIR}/nemac"
+    cp /tmp/nemac "${INSTALL_DIR}/nemac"
     rm -f /tmp/nemac
 
     if [ -n "$panel_url" ]; then
-        curl -fsSL -o /tmp/nemac-panel "$panel_url"
+        if ! curl -fsSL -o /tmp/nemac-panel "$panel_url"; then
+            die "Не удалось скачать nemac-panel"
+        fi
         chmod +x /tmp/nemac-panel
-        sudo cp /tmp/nemac-panel "${INSTALL_DIR}/nemac-panel"
+        cp /tmp/nemac-panel "${INSTALL_DIR}/nemac-panel"
         rm -f /tmp/nemac-panel
     fi
-    echo -e "${GREEN}Установлено в ${INSTALL_DIR}${NC}"
-}
-
-install_from_source() {
-    echo -e "${CYAN}Сборка из исходников...${NC}"
-    local build_dir="/tmp/nemac-build"
-    rm -rf "$build_dir"
-    git clone "https://github.com/${REPO}.git" "$build_dir"
-    mkdir -p "$build_dir/build"
-    cmake -S "$build_dir" -B "$build_dir/build" -DCMAKE_BUILD_TYPE=Release
-    cmake --build "$build_dir/build" -j"$(nproc)"
-    sudo cp "$build_dir/build/nemac" "${INSTALL_DIR}/nemac"
-    sudo cp "$build_dir/build/panel/nemac-panel" "${INSTALL_DIR}/nemac-panel"
-    rm -rf "$build_dir"
-    echo -e "${GREEN}Собрано и установлено в ${INSTALL_DIR}${NC}"
+    echo -e "${GREEN}Nemac установлен${NC}"
 }
 
 setup_dirs() {
-    sudo mkdir -p "${DATA_DIR}/wallpapers"
-    mkdir -p "$HOME/.local/share/nemac/wallpapers"
+    mkdir -p "${DATA_DIR}/wallpapers"
+    mkdir -p "${REAL_HOME}/.local/share/nemac/wallpapers"
+    chown -R "${REAL_USER}:${REAL_USER}" "${REAL_HOME}/.local/share/nemac"
 }
 
 setup_xinitrc() {
-    local xinitrc="$HOME/.xinitrc"
+    local xinitrc="${REAL_HOME}/.xinitrc"
     if [ -f "$xinitrc" ] && grep -q "nemac" "$xinitrc"; then
-        echo -e "${GREEN}.xinitrc уже настроен${NC}"
         return
     fi
 
     if [ -f "$xinitrc" ]; then
         cp "$xinitrc" "${xinitrc}.bak"
-        echo -e "${CYAN}Бэкап .xinitrc -> .xinitrc.bak${NC}"
     fi
 
     cat > "$xinitrc" << 'EOF'
@@ -105,29 +103,17 @@ xset s off -dpms 2>/dev/null
 exec nemac
 EOF
     chmod +x "$xinitrc"
-    echo -e "${GREEN}.xinitrc настроен${NC}"
+    chown "${REAL_USER}:${REAL_USER}" "$xinitrc"
 }
 
 main() {
     banner
+    check_root
     check_arch
-
-    echo -e "${BOLD}Выберите способ установки:${NC}"
-    echo "  1) Из релиза (готовый бинарник)"
-    echo "  0) Из исходников (сборка)"
-    echo ""
-    read -rp "Выбор [1/0]: " choice
-
     install_deps
-
-    case "$choice" in
-        0) install_from_source ;;
-        *) install_from_release ;;
-    esac
-
+    install_from_release
     setup_dirs
     setup_xinitrc
-
     echo ""
     echo -e "${GREEN}${BOLD}Nemac установлен!${NC}"
     echo -e "Запуск: ${CYAN}startx${NC}"
