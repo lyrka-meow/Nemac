@@ -40,21 +40,31 @@ install_deps() {
 
 install_from_release() {
     echo -e "${CYAN}Загрузка последнего релиза...${NC}"
-    local url
-    url=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep '"browser_download_url"' | head -1 | cut -d'"' -f4)
+    local api_resp
+    api_resp=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || true
 
-    if [ -z "$url" ]; then
-        echo -e "${RED}Релиз не найден. Попробуйте собрать из исходников.${NC}"
-        return 1
+    local nemac_url panel_url
+    nemac_url=$(echo "$api_resp" | grep '"browser_download_url".*nemac"' | head -1 | cut -d'"' -f4)
+    panel_url=$(echo "$api_resp" | grep '"browser_download_url".*nemac-panel"' | head -1 | cut -d'"' -f4)
+
+    if [ -z "$nemac_url" ]; then
+        echo -e "${CYAN}Релиз не найден, сборка из исходников...${NC}"
+        install_from_source
+        return
     fi
 
-    local tmp="/tmp/nemac-release"
-    curl -fsSL -o "$tmp" "$url"
-    chmod +x "$tmp"
-    sudo cp "$tmp" "${INSTALL_DIR}/nemac"
-    rm -f "$tmp"
-    echo -e "${GREEN}Бинарник установлен в ${INSTALL_DIR}/nemac${NC}"
+    curl -fsSL -o /tmp/nemac "$nemac_url"
+    chmod +x /tmp/nemac
+    sudo cp /tmp/nemac "${INSTALL_DIR}/nemac"
+    rm -f /tmp/nemac
+
+    if [ -n "$panel_url" ]; then
+        curl -fsSL -o /tmp/nemac-panel "$panel_url"
+        chmod +x /tmp/nemac-panel
+        sudo cp /tmp/nemac-panel "${INSTALL_DIR}/nemac-panel"
+        rm -f /tmp/nemac-panel
+    fi
+    echo -e "${GREEN}Установлено в ${INSTALL_DIR}${NC}"
 }
 
 install_from_source() {
@@ -71,15 +81,9 @@ install_from_source() {
     echo -e "${GREEN}Собрано и установлено в ${INSTALL_DIR}${NC}"
 }
 
-install_assets() {
-    echo -e "${CYAN}Установка ресурсов...${NC}"
+setup_dirs() {
     sudo mkdir -p "${DATA_DIR}/wallpapers"
-    local walls_url="https://raw.githubusercontent.com/${REPO}/main/assets/wallpapers"
-    for f in wall_01.jpg wall_02.jpg wall_03.jpg; do
-        if [ ! -f "${DATA_DIR}/wallpapers/$f" ]; then
-            sudo curl -fsSL -o "${DATA_DIR}/wallpapers/$f" "${walls_url}/$f" 2>/dev/null || true
-        fi
-    done
+    mkdir -p "$HOME/.local/share/nemac/wallpapers"
 }
 
 setup_xinitrc() {
@@ -101,7 +105,7 @@ xset s off -dpms 2>/dev/null
 exec nemac
 EOF
     chmod +x "$xinitrc"
-    echo -e "${GREEN}.xinitrc настроен. Используйте startx для запуска.${NC}"
+    echo -e "${GREEN}.xinitrc настроен${NC}"
 }
 
 main() {
@@ -121,7 +125,7 @@ main() {
         *) install_from_release ;;
     esac
 
-    install_assets
+    setup_dirs
     setup_xinitrc
 
     echo ""
