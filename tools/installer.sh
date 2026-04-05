@@ -66,14 +66,15 @@ install_from_source() {
     cmake -S "$build_dir" -B "$build_dir/build" -DCMAKE_BUILD_TYPE=Release
     cmake --build "$build_dir/build" -j"$(nproc)"
     sudo cp "$build_dir/build/nemac" "${INSTALL_DIR}/nemac"
+    sudo cp "$build_dir/build/panel/nemac-panel" "${INSTALL_DIR}/nemac-panel"
     rm -rf "$build_dir"
-    echo -e "${GREEN}Собрано и установлено в ${INSTALL_DIR}/nemac${NC}"
+    echo -e "${GREEN}Собрано и установлено в ${INSTALL_DIR}${NC}"
 }
 
 install_assets() {
     echo -e "${CYAN}Установка ресурсов...${NC}"
     sudo mkdir -p "${DATA_DIR}/wallpapers"
-    local walls_url="https://raw.githubusercontent.com/${REPO}/master/assets/wallpapers"
+    local walls_url="https://raw.githubusercontent.com/${REPO}/main/assets/wallpapers"
     for f in wall_01.jpg wall_02.jpg wall_03.jpg; do
         if [ ! -f "${DATA_DIR}/wallpapers/$f" ]; then
             sudo curl -fsSL -o "${DATA_DIR}/wallpapers/$f" "${walls_url}/$f" 2>/dev/null || true

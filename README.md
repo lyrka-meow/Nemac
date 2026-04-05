@@ -5,7 +5,7 @@ Nemac — десктопное окружение для X11 (Arch Linux).
 ## Установка
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/lyrka-meow/Nemac/master/tools/installer.sh)"
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/lyrka-meow/Nemac/main/tools/installer.sh)"
 ```
 
 ## Запуск
@@ -35,7 +35,7 @@ cd Nemac
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
-sudo cp nemac /usr/local/bin/
+sudo cp nemac panel/nemac-panel /usr/local/bin/
 ```
 
 ## Зависимости (Arch)
