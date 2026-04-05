@@ -42,21 +42,32 @@ sudo cp nemac /usr/local/bin/
 
 ```bash
 sudo pacman -S --needed xorg-server xorg-xinit libx11 libxcomposite libxdamage \
-  libxfixes libxinerama libxft glew mesa imlib2 dbus qt6-base cmake
+  libxfixes libxinerama libxft glew mesa imlib2 dbus qt6-base qt6-declarative cmake
 ```
 
 ## Архитектура
 
 ```
 src/
-├── core/          # Точка входа, одновременный запуск всех компонентов
-├── compositor/    # GLX-композитор (blur, тени, бар, медиа-панель)
-├── wm/            # Управление окнами (floating, зоны, закреп, fullscreen)
-├── monitor/       # Мультимонитор, определение главного экрана
-├── gpu/           # Определение GPU (NVIDIA/AMD/гибрид), env-переменные
-├── wallpaper/     # Обои (Imlib2, рандом при первом запуске)
-├── updater/       # Фоновое автообновление из GitHub releases
-└── mpris/         # Медиа-интеграция (D-Bus)
-panel/             # Qt-панель (отдельный процесс)
-tools/             # Установщик, сборка, релизы
+├── core/
+├── compositor/
+├── wm/
+├── monitor/
+├── gpu/
+├── wallpaper/
+├── updater/
+└── mpris/
+panel/
+tools/
 ```
+
+- **core** — точка входа, запуск компонентов
+- **compositor** — GLX-композитор, blur, тени, бар, медиа-панель
+- **wm** — floating WM, зоны, закреп, fullscreen
+- **monitor** — мультимонитор
+- **gpu** — определение GPU, env-переменные
+- **wallpaper** — обои через Imlib2
+- **updater** — автообновление из GitHub
+- **mpris** — медиа-интеграция через D-Bus
+- **panel** — Qt-панель (отдельный процесс)
+- **tools** — установщик, сборка

@@ -85,20 +85,9 @@ std::vector<std::string> Wallpaper::list(const std::string& dir) {
 }
 
 void Wallpaper::init_defaults(Display* dpy, int screen, const std::string& data_dir) {
-    std::string wall_dir = data_dir + "/wallpapers";
-    std::string user_dir = std::string(getenv("HOME") ? getenv("HOME") : "/tmp") +
-                           "/.local/share/nemac/wallpapers";
-
-    auto user_walls = list(user_dir);
-    if (!user_walls.empty()) {
-        std::string chosen = user_walls[rand() % user_walls.size()];
-        set(dpy, screen, chosen);
-        return;
-    }
-
-    auto default_walls = list(wall_dir);
-    if (!default_walls.empty()) {
-        std::string chosen = default_walls[rand() % default_walls.size()];
-        set(dpy, screen, chosen);
-    }
+    (void)data_dir;
+    Window root = RootWindow(dpy, screen);
+    XSetWindowBackground(dpy, root, 0x121218);
+    XClearWindow(dpy, root);
+    XFlush(dpy);
 }

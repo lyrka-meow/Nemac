@@ -11,12 +11,18 @@ pkg_check_modules(DBUS REQUIRED dbus-1)
 
 set(NEMAC_SOURCES
     src/core/main.cpp
+    src/core/launcher.cpp
     src/compositor/compositor.cpp
+    src/compositor/texture.cpp
+    src/compositor/bar.cpp
+    src/compositor/panel.cpp
+    src/compositor/render.cpp
     src/wm/wm.cpp
     src/monitor/monitor.cpp
     src/gpu/gpu.cpp
     src/wallpaper/wallpaper.cpp
     src/updater/updater.cpp
+    src/mpris/mpris.cpp
 )
 
 add_executable(nemac ${NEMAC_SOURCES})

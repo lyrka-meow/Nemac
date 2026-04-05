@@ -19,7 +19,8 @@ in  vec2 vUV;
 out vec4 fragColor;
 void main() {
     vec4 c = texture(uTex, vUV);
-    fragColor = vec4(c.rgb, c.a * uOpacity);
+    float a = (c.a < 0.01) ? 1.0 : c.a;
+    fragColor = vec4(c.rgb, a * uOpacity);
 }
 )GLSL";
 

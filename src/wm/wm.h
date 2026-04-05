@@ -1,47 +1,7 @@
 #pragma once
-#include <X11/Xlib.h>
+#include "types.h"
 #include <X11/Xatom.h>
-#include <X11/extensions/Xcomposite.h>
-#include <X11/extensions/Xdamage.h>
-#include <X11/extensions/Xinerama.h>
-#include <GL/glew.h>
-#include <GL/gl.h>
-#include <GL/glx.h>
 #include <vector>
-#include <string>
-
-struct WinInfo {
-    Window xwin      = None;
-    int    x         = 0, y = 0;
-    int    w         = 0, h = 0;
-    bool   pinned    = false;
-    bool   fullscreen = false;
-    bool   unmanaged = false;
-
-    Pixmap    pixmap     = None;
-    GLXPixmap glx_pixmap = None;
-    GLuint    texture    = 0;
-    Damage    damage     = None;
-    bool      dirty      = true;
-    float     opacity    = 1.0f;
-    int       pix_w      = 0, pix_h = 0;
-    bool      bypass     = false;
-};
-
-struct Zone {
-    int x = 0, y = 0, w = 0, h = 0;
-    int def_x = 0, def_y = 0, def_w = 0, def_h = 0;
-    int monitor_idx = 0;
-};
-
-struct DragState {
-    bool active = false;
-    int  idx    = -1;
-    int  sx = 0, sy = 0;
-    int  ox = 0, oy = 0;
-    int  ow = 0, oh = 0;
-    int  left = 0, top = 0;
-};
 
 class Compositor;
 struct MonitorInfo;
@@ -73,6 +33,7 @@ public:
 
     int view_x() const { return _view_x; }
     int view_y() const { return _view_y; }
+    void auto_scroll_tick();
 
 private:
     void spawn(const char* cmd);
@@ -80,6 +41,9 @@ private:
     void update_zones();
     void pin_focused();
     void fullscreen_focused();
+    void desktop_focused();
+    void scroll_view(int dx, int dy);
+    void clamp_view();
     void switch_primary(int dir);
     const MonitorInfo& primary_mon() const;
 
@@ -96,12 +60,13 @@ private:
 
     DragState _move_drag;
     DragState _resize_drag;
+    DragState _scroll_drag;
 
     static constexpr int BORDER          = 2;
-    static constexpr int ZONE_MARGIN     = 40;
     static constexpr int DEFAULT_WIN_W   = 800;
     static constexpr int DEFAULT_WIN_H   = 600;
     static constexpr unsigned int MOD    = Mod1Mask;
     static constexpr unsigned long FOCUSED_BORDER = 0x88aaff;
     static constexpr unsigned long NORMAL_BORDER  = 0x444444;
+    static constexpr int SCROLL_STEP    = 200;
 };

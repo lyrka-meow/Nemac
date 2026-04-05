@@ -1,4 +1,5 @@
 #include "updater.h"
+#include "../core/util.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -8,17 +9,6 @@
 
 #define NEMAC_REPO "lyrka-meow/Nemac"
 #define CHECK_INTERVAL_SEC 3600
-
-static std::string exec_cmd(const char* cmd) {
-    char buf[4096];
-    std::string out;
-    FILE* pipe = popen(cmd, "r");
-    if (!pipe) return out;
-    while (fgets(buf, sizeof(buf), pipe))
-        out += buf;
-    pclose(pipe);
-    return out;
-}
 
 Updater::ReleaseInfo Updater::check_update(const std::string& current_version) {
     ReleaseInfo info;

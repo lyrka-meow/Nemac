@@ -5,22 +5,23 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickControls2)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DBUS REQUIRED dbus-1)
 
 set(PANEL_SOURCES
     main.cpp
-    PanelWindow.cpp
-    widgets/Clock.cpp
-    widgets/MediaPlayer.cpp
-    widgets/FileBrowser.cpp
-    widgets/WallpaperPicker.cpp
-    widgets/AppManager.cpp
-    widgets/Terminal.cpp
+    PanelBridge.cpp
+    MprisBackend.cpp
+    FileModel.cpp
+    WallpaperModel.cpp
+    PackageBackend.cpp
+    TermBackend.cpp
 )
 
-add_executable(nemac-panel ${PANEL_SOURCES})
+qt_add_resources(PANEL_QRC qml.qrc)
+
+add_executable(nemac-panel ${PANEL_SOURCES} ${PANEL_QRC})
 
 target_include_directories(nemac-panel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -29,6 +30,8 @@ target_include_directories(nemac-panel PRIVATE
 
 target_link_libraries(nemac-panel PRIVATE
     Qt6::Widgets
+    Qt6::Quick
+    Qt6::QuickControls2
     X11
     ${DBUS_LIBRARIES}
 )

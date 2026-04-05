@@ -2,6 +2,7 @@
 #include "../wm/wm.h"
 #include "../mpris/mpris.h"
 #include <X11/Xft/Xft.h>
+#include <X11/extensions/Xcomposite.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/shape.h>
 #include <ctime>
@@ -11,7 +12,7 @@ public:
     Compositor(Display* dpy, Window root, int screen);
     ~Compositor();
 
-    bool init(int sw, int sh, int mx, int my);
+    bool init(int sw, int sh, int mx, int my, bool nvidia = false);
 
     void add_window(WinInfo& w);
     void remove_window(WinInfo& w);
@@ -19,7 +20,7 @@ public:
 
     void render(std::vector<WinInfo>& wins,
                 int view_x, int view_y,
-                int mx, int my, int sw, int sh);
+                int sw);
 
     int  damage_event   = 0;
     Atom opacity_atom   = None;
@@ -37,39 +38,31 @@ public:
     static constexpr int DISC_R  = 50;
 
 private:
-    /* ======== Бар ======== */
     void init_bar();
     void update_bar_time();
-    void render_bar(int mx, int sw);
+    void render_bar(int sw);
 
-    /* ======== Медиа-панель ======== */
     void init_panel();
-    void render_panel(int mx, int sw);
+    void render_panel(int sw);
     void update_panel_texts();
     void draw_panel_text(GLuint tex, int tw, int th,
                          int px, int py, int pan_x, int pan_y);
 
-    /* ======== Overlay ввод ======== */
     void update_overlay_input();
 
-    /* ======== GL утилиты ======== */
     GLuint make_shader(GLenum type, const char* src);
     GLuint make_program(const char* vert, const char* frag);
     void   make_fbo(int w, int h, GLuint& fbo, GLuint& tex);
     void   update_texture(WinInfo& w);
-    void   draw_quad(int sx, int sy, int sw2, int sh2,
-                     int win_x, int win_y, int win_w, int win_h,
+    void   draw_quad(int win_x, int win_y, int win_w, int win_h,
                      GLuint tex, float opacity);
     void   blur_fbo(int sw, int sh);
 
-    /* ======== Текст (XFT -> GL) ======== */
     void   xft_to_tex(const std::string& text, XftFont* font,
                       GLuint& tex, int& tw, int& th);
 
-    /* ======== Обложка альбома ======== */
     void   load_art(const std::string& url);
 
-    /* ======== Векторные иконки ======== */
     void   draw_solid_tri(float x0, float y0, float x1, float y1, float x2, float y2,
                           float r, float g, float b, float a);
     void   draw_solid_rect(float x0, float y0, float x1, float y1,
@@ -93,14 +86,15 @@ private:
 
     int  _rw = 0, _rh = 0;
     int  _mx = 0, _my = 0;
-    int  _sw = 0, _sh = 0;
+    int  _sw = 0;
 
     GLXFBConfig _pix_fbc  = nullptr;
     bool        _fbc_ok   = false;
+    bool        _pix_rgba = true;
     bool        _ok       = false;
     bool        _dragging = false;
+    bool        _nvidia   = false;
 
-    /* ======== Uniform-локации ======== */
     GLint _u_comp_tex = -1, _u_comp_opacity = -1;
     GLint _u_blur_tex = -1, _u_blur_dir     = -1;
     GLint _u_shad_alpha = -1;
@@ -113,7 +107,6 @@ private:
     PFNGLXBINDTEXIMAGEEXTPROC    _bindTex    = nullptr;
     PFNGLXRELEASETEXIMAGEEXTPROC _releaseTex = nullptr;
 
-    /* ======== Бар (статус) ======== */
     XftFont*  _bar_font    = nullptr;
     XftDraw*  _bar_xdraw   = nullptr;
     Pixmap    _bar_pm      = None;
@@ -127,7 +120,6 @@ private:
     int       _bar_tw      = 256;
     char      _bar_last_time[16] = {};
 
-    /* ======== Медиа-панель ======== */
     GLuint _prog_disc     = 0;
     GLint  _u_disc_color  = -1, _u_disc_angle = -1;
     GLint  _u_disc_has_art= -1, _u_disc_art   = -1;
@@ -149,9 +141,6 @@ private:
     XftFont* _pan_font_title  = nullptr;
     XftFont* _pan_font_artist = nullptr;
     XftFont* _pan_font_time   = nullptr;
-    bool   _bar_bg_dirty  = true;
-    bool   _pan_bg_dirty  = true;
-    int    _last_view_x   = -1, _last_view_y = -1;
     double _last_render_t = 0.0;
     float _disc_r = 0.45f, _disc_g = 0.25f, _disc_b = 0.70f;
 };

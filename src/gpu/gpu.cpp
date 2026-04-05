@@ -1,4 +1,5 @@
 #include "gpu.h"
+#include "../core/util.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -8,17 +9,6 @@
 static bool file_exists(const char* path) {
     std::ifstream f(path);
     return f.good();
-}
-
-static std::string exec_cmd(const char* cmd) {
-    char buf[512];
-    std::string out;
-    FILE* pipe = popen(cmd, "r");
-    if (!pipe) return out;
-    while (fgets(buf, sizeof(buf), pipe))
-        out += buf;
-    pclose(pipe);
-    return out;
 }
 
 GpuInfo Gpu::detect() {
