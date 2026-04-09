@@ -8,7 +8,9 @@
 #include <dirent.h>
 #include <algorithm>
 
-bool Wallpaper::set(Display* dpy, int screen, const std::string& path) {
+bool Wallpaper::set(Display* dpy, int screen, const std::string& path,
+                    const std::vector<MonitorInfo>& monitors)
+{
     if (path.empty()) return false;
 
     Imlib_Image img = imlib_load_image(path.c_str());
@@ -17,26 +19,41 @@ bool Wallpaper::set(Display* dpy, int screen, const std::string& path) {
         return false;
     }
 
-    int sw = DisplayWidth(dpy, screen);
-    int sh = DisplayHeight(dpy, screen);
-    Window root = RootWindow(dpy, screen);
-
     imlib_context_set_image(img);
     int iw = imlib_image_get_width();
     int ih = imlib_image_get_height();
 
-    Imlib_Image scaled = imlib_create_cropped_scaled_image(0, 0, iw, ih, sw, sh);
-    imlib_free_image();
-    if (!scaled) return false;
+    int sw = DisplayWidth(dpy, screen);
+    int sh = DisplayHeight(dpy, screen);
+    Window root = RootWindow(dpy, screen);
 
-    imlib_context_set_image(scaled);
     imlib_context_set_display(dpy);
     imlib_context_set_visual(DefaultVisual(dpy, screen));
     imlib_context_set_colormap(DefaultColormap(dpy, screen));
 
     Pixmap pm = XCreatePixmap(dpy, root, sw, sh, DefaultDepth(dpy, screen));
     imlib_context_set_drawable(pm);
-    imlib_render_image_on_drawable(0, 0);
+
+    for (auto& m : monitors) {
+        imlib_context_set_image(img);
+        float scale_w = (float)m.width / iw;
+        float scale_h = (float)m.height / ih;
+        float scale = std::max(scale_w, scale_h);
+        int cw = (int)(m.width / scale);
+        int ch = (int)(m.height / scale);
+        int cx = (iw - cw) / 2;
+        int cy = (ih - ch) / 2;
+
+        Imlib_Image crop = imlib_create_cropped_scaled_image(cx, cy, cw, ch,
+                                                              m.width, m.height);
+        if (!crop) continue;
+        imlib_context_set_image(crop);
+        imlib_context_set_drawable(pm);
+        imlib_render_image_on_drawable(m.x, m.y);
+        imlib_free_image();
+    }
+
+    imlib_context_set_image(img);
     imlib_free_image();
 
     XSetWindowBackgroundPixmap(dpy, root, pm);
@@ -50,7 +67,8 @@ bool Wallpaper::set(Display* dpy, int screen, const std::string& path) {
                     PropModeReplace, (unsigned char*)&pm, 1);
 
     XFlush(dpy);
-    fprintf(stderr, "nemac: обои установлены: %s\n", path.c_str());
+    fprintf(stderr, "nemac: обои установлены: %s (%d мониторов)\n",
+            path.c_str(), (int)monitors.size());
     return true;
 }
 

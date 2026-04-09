@@ -41,8 +41,7 @@ install_deps() {
     if ! pacman -S --needed --noconfirm \
         xorg-server xorg-xinit xorg-xrandr \
         libx11 libxcomposite libxdamage libxfixes libxinerama libxft \
-        glew mesa imlib2 dbus \
-        qt6-base qt6-declarative \
+        glew mesa imlib2 \
         curl > /dev/null 2>&1; then
         die "Не удалось установить зависимости. Проверьте зеркала pacman"
     fi
@@ -54,9 +53,8 @@ install_from_release() {
     local api_resp
     api_resp=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null) || true
 
-    local nemac_url panel_url
+    local nemac_url
     nemac_url=$(echo "$api_resp" | grep '"browser_download_url".*nemac"' | head -1 | cut -d'"' -f4)
-    panel_url=$(echo "$api_resp" | grep '"browser_download_url".*nemac-panel"' | head -1 | cut -d'"' -f4)
 
     if [ -z "$nemac_url" ]; then
         die "Релиз не найден. Проверьте https://github.com/${REPO}/releases"
@@ -68,15 +66,6 @@ install_from_release() {
     chmod +x /tmp/nemac
     cp /tmp/nemac "${INSTALL_DIR}/nemac"
     rm -f /tmp/nemac
-
-    if [ -n "$panel_url" ]; then
-        if ! curl -fsSL -o /tmp/nemac-panel "$panel_url"; then
-            die "Не удалось скачать nemac-panel"
-        fi
-        chmod +x /tmp/nemac-panel
-        cp /tmp/nemac-panel "${INSTALL_DIR}/nemac-panel"
-        rm -f /tmp/nemac-panel
-    fi
     echo -e "${GREEN}Nemac установлен${NC}"
 }
 

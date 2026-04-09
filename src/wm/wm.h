@@ -46,6 +46,8 @@ private:
     void clamp_view();
     void switch_primary(int dir);
     const MonitorInfo& primary_mon() const;
+    bool is_dock(Window w);
+    void recalc_workarea();
 
     Display*    _dpy;
     Window      _root;
@@ -61,12 +63,11 @@ private:
     DragState _move_drag;
     DragState _resize_drag;
     DragState _scroll_drag;
+    int _strut_top = 0;
 
     static constexpr int BORDER          = 2;
     static constexpr int DEFAULT_WIN_W   = 800;
     static constexpr int DEFAULT_WIN_H   = 600;
     static constexpr unsigned int MOD    = Mod1Mask;
-    static constexpr unsigned long FOCUSED_BORDER = 0x88aaff;
-    static constexpr unsigned long NORMAL_BORDER  = 0x444444;
     static constexpr int SCROLL_STEP    = 200;
 };

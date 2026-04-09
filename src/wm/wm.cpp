@@ -22,31 +22,52 @@ void WM::init(const std::vector<MonitorInfo>& monitors, Compositor* comp) {
     _comp = comp;
     _primary = Monitor::find_primary(_monitors);
 
-    int bar_h = comp ? 32 : 0;
-    int bx0 = INT_MAX, by0 = INT_MAX, bx1 = INT_MIN, by1 = INT_MIN;
-    for (auto& m : _monitors) {
-        if (m.x < bx0) bx0 = m.x;
-        if (m.y + bar_h < by0) by0 = m.y + bar_h;
-        if (m.x + m.width > bx1) bx1 = m.x + m.width;
-        if (m.y + m.height > by1) by1 = m.y + m.height;
-    }
     _zones.resize(_monitors.size());
-    for (int i = 0; i < (int)_monitors.size(); i++) {
-        _zones[i].x     = bx0;
-        _zones[i].y     = by0;
-        _zones[i].w     = bx1 - bx0;
-        _zones[i].h     = by1 - by0;
-        _zones[i].def_x = bx0;
-        _zones[i].def_y = by0;
-        _zones[i].def_w = bx1 - bx0;
-        _zones[i].def_h = by1 - by0;
-        _zones[i].monitor_idx = i;
-    }
+    recalc_workarea();
+
     unsigned int mods[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};
     for (auto x : mods)
         XGrabButton(_dpy, Button3, ShiftMask | x, _root, False,
                     ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
                     GrabModeAsync, GrabModeAsync, None, None);
+}
+
+void WM::recalc_workarea() {
+    int bx0 = INT_MAX, by0 = INT_MAX, bx1 = INT_MIN, by1 = INT_MIN;
+    for (auto& m : _monitors) {
+        if (m.x < bx0) bx0 = m.x;
+        if (m.y < by0) by0 = m.y;
+        if (m.x + m.width > bx1) bx1 = m.x + m.width;
+        if (m.y + m.height > by1) by1 = m.y + m.height;
+    }
+    for (int i = 0; i < (int)_monitors.size(); i++) {
+        _zones[i].x     = bx0;
+        _zones[i].y     = by0 + _strut_top;
+        _zones[i].w     = bx1 - bx0;
+        _zones[i].h     = by1 - by0 - _strut_top;
+        _zones[i].def_x = bx0;
+        _zones[i].def_y = by0 + _strut_top;
+        _zones[i].def_w = bx1 - bx0;
+        _zones[i].def_h = by1 - by0 - _strut_top;
+        _zones[i].monitor_idx = i;
+    }
+}
+
+bool WM::is_dock(Window w) {
+    static Atom type_atom = XInternAtom(_dpy, "_NET_WM_WINDOW_TYPE", False);
+    static Atom dock_atom = XInternAtom(_dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
+    Atom actual; int fmt;
+    unsigned long n, left;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(_dpy, w, type_atom, 0, 32, False, XA_ATOM,
+                           &actual, &fmt, &n, &left, &data) == Success && data) {
+        Atom* atoms = (Atom*)data;
+        for (unsigned long i = 0; i < n; i++) {
+            if (atoms[i] == dock_atom) { XFree(data); return true; }
+        }
+        XFree(data);
+    }
+    return false;
 }
 
 const MonitorInfo& WM::primary_mon() const {
@@ -142,7 +163,6 @@ void WM::fullscreen_focused() {
         w.y = m.y + _view_y;
         w.w = m.width;
         w.h = m.height;
-        XSetWindowBorderWidth(_dpy, w.xwin, 0);
         XRaiseWindow(_dpy, w.xwin);
     } else {
         w.w = DEFAULT_WIN_W;
@@ -150,7 +170,6 @@ void WM::fullscreen_focused() {
         auto& m = primary_mon();
         w.x = m.x + _view_x + (m.width - w.w) / 2;
         w.y = m.y + _view_y + (m.height - w.h) / 2;
-        XSetWindowBorderWidth(_dpy, w.xwin, BORDER);
     }
     layout();
 }
@@ -162,12 +181,10 @@ void WM::desktop_focused() {
     if (w.desktop) {
         w.pre_desk_x = w.x; w.pre_desk_y = w.y;
         w.pre_desk_w = w.w; w.pre_desk_h = w.h;
-        XSetWindowBorderWidth(_dpy, w.xwin, 0);
         XLowerWindow(_dpy, w.xwin);
     } else {
         w.x = w.pre_desk_x; w.y = w.pre_desk_y;
         w.w = w.pre_desk_w; w.h = w.pre_desk_h;
-        XSetWindowBorderWidth(_dpy, w.xwin, BORDER);
         XRaiseWindow(_dpy, w.xwin);
     }
     layout();
@@ -293,21 +310,19 @@ void WM::layout() {
         XMoveResizeWindow(_dpy, w.xwin, w.x - _view_x, w.y - _view_y, w.w, w.h);
     }
 
-    if (_comp) {
-        auto& m = primary_mon();
-        _comp->render(_wins, _view_x, _view_y, m.width);
-    }
+    if (_comp)
+        _comp->render(_wins, _view_x, _view_y);
     XFlush(_dpy);
 }
 
 void WM::set_focus(int idx) {
     if (_focused >= 0 && _focused < (int)_wins.size())
-        XSetWindowBorder(_dpy, _wins[_focused].xwin, NORMAL_BORDER);
+        _wins[_focused].focused = false;
     _focused = idx;
     if (_focused < 0 || _focused >= (int)_wins.size()) return;
     auto& w = _wins[_focused];
     if (w.desktop) return;
-    XSetWindowBorder(_dpy, w.xwin, FOCUSED_BORDER);
+    w.focused = true;
     XRaiseWindow(_dpy, w.xwin);
     XSetInputFocus(_dpy, w.xwin, RevertToPointerRoot, CurrentTime);
     layout();
@@ -318,6 +333,33 @@ void WM::handle_map_request(XMapRequestEvent* e) {
     XWindowAttributes wa;
     if (!XGetWindowAttributes(_dpy, e->window, &wa) || wa.override_redirect) return;
 
+    if (is_dock(e->window)) {
+        WinInfo nw;
+        nw.xwin = e->window;
+        nw.x = wa.x; nw.y = wa.y;
+        nw.w = wa.width; nw.h = wa.height;
+        nw.unmanaged = true;
+        nw.dock = true;
+        _wins.push_back(nw);
+        XMapWindow(_dpy, e->window);
+        if (_comp) _comp->add_window(_wins.back());
+
+        Atom strut_atom = XInternAtom(_dpy, "_NET_WM_STRUT_PARTIAL", False);
+        Atom actual; int fmt;
+        unsigned long n, left;
+        unsigned char* data = nullptr;
+        if (XGetWindowProperty(_dpy, e->window, strut_atom, 0, 12, False,
+                               XA_CARDINAL, &actual, &fmt, &n, &left, &data) == Success && data && n >= 10) {
+            long* vals = (long*)data;
+            _strut_top = (int)vals[2];
+            XFree(data);
+        } else if (data) XFree(data);
+
+        recalc_workarea();
+        layout();
+        return;
+    }
+
     WinInfo nw;
     nw.xwin = e->window;
     nw.w    = std::min(wa.width  > 1 ? wa.width  : DEFAULT_WIN_W, primary_mon().width - BORDER * 2);
@@ -325,11 +367,11 @@ void WM::handle_map_request(XMapRequestEvent* e) {
 
     auto& m = primary_mon();
     nw.x = m.x + (m.width - nw.w) / 2;
-    nw.y = m.y + (m.height - nw.h) / 2;
+    nw.y = m.y + _strut_top + (m.height - _strut_top - nw.h) / 2;
 
     _wins.push_back(nw);
 
-    XSetWindowBorderWidth(_dpy, e->window, BORDER);
+    XSetWindowBorderWidth(_dpy, e->window, 0);
     XSelectInput(_dpy, e->window, FocusChangeMask | PropertyChangeMask);
     XGrabButton(_dpy, Button1, AnyModifier, e->window, False,
                 ButtonPressMask, GrabModeSync, GrabModeAsync, None, None);
@@ -353,14 +395,19 @@ void WM::handle_map_request(XMapRequestEvent* e) {
 void WM::handle_destroy(Window w) {
     int idx = find_win(w);
     if (idx < 0) return;
+    bool was_dock = _wins[idx].dock;
     bool was_unmanaged = _wins[idx].unmanaged;
     if (_comp) _comp->remove_window(_wins[idx]);
     _wins.erase(_wins.begin() + idx);
+    if (was_dock) {
+        _strut_top = 0;
+        recalc_workarea();
+        layout();
+        return;
+    }
     if (was_unmanaged) {
-        if (_comp) {
-            auto& m = primary_mon();
-            _comp->render(_wins, _view_x, _view_y, m.width);
-        }
+        if (_comp)
+            _comp->render(_wins, _view_x, _view_y);
         return;
     }
     if (_focused > idx) _focused--;
@@ -401,7 +448,6 @@ void WM::handle_button_press(XButtonEvent* e) {
             _move_drag = {true, idx, e->x_root, e->y_root,
                           _wins[idx].x, _wins[idx].y, 0, 0, 0, 0};
             XRaiseWindow(_dpy, e->window);
-            if (_comp) _comp->set_dragging(true);
         }
         return;
     }
@@ -425,7 +471,6 @@ void WM::handle_button_press(XButtonEvent* e) {
                 (e->y_root - wa.y) < (wa.height / 2) ? 1 : 0
             };
             XRaiseWindow(_dpy, e->window);
-            if (_comp) _comp->set_dragging(true);
         }
         return;
     }
@@ -445,12 +490,10 @@ void WM::handle_button_release(XButtonEvent* e) {
     (void)e;
     if (_move_drag.active) {
         _move_drag = {};
-        if (_comp) _comp->set_dragging(false);
         update_zones();
     }
     if (_resize_drag.active) {
         _resize_drag = {};
-        if (_comp) _comp->set_dragging(false);
         update_zones();
     }
     if (_scroll_drag.active) {
@@ -496,8 +539,7 @@ void WM::handle_motion(XMotionEvent* e) {
             gettimeofday(&now, nullptr);
             double el = (now.tv_sec - lm.tv_sec) + (now.tv_usec - lm.tv_usec) * 1e-6;
             if (el >= 0.016) {
-                auto& m = primary_mon();
-                _comp->render(_wins, _view_x, _view_y, m.width);
+                _comp->render(_wins, _view_x, _view_y);
                 lm = now;
             }
         }
@@ -525,8 +567,7 @@ void WM::handle_motion(XMotionEvent* e) {
             gettimeofday(&now, nullptr);
             double el = (now.tv_sec - lr.tv_sec) + (now.tv_usec - lr.tv_usec) * 1e-6;
             if (el >= 0.016) {
-                auto& m = primary_mon();
-                _comp->render(_wins, _view_x, _view_y, m.width);
+                _comp->render(_wins, _view_x, _view_y);
                 lr = now;
             }
         }

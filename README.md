@@ -35,14 +35,14 @@ cd Nemac
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
-sudo cp nemac panel/nemac-panel /usr/local/bin/
+sudo cp nemac /usr/local/bin/
 ```
 
 ## Зависимости (Arch)
 
 ```bash
 sudo pacman -S --needed xorg-server xorg-xinit libx11 libxcomposite libxdamage \
-  libxfixes libxinerama libxft glew mesa imlib2 dbus qt6-base qt6-declarative cmake
+  libxfixes libxinerama libxft glew mesa imlib2 cmake
 ```
 
 ## Архитектура
@@ -55,19 +55,15 @@ src/
 ├── monitor/
 ├── gpu/
 ├── wallpaper/
-├── updater/
-└── mpris/
-panel/
+└── updater/
 tools/
 ```
 
 - **core** — точка входа, запуск компонентов
-- **compositor** — GLX-композитор, blur, тени, бар, медиа-панель
+- **compositor** — GLX-композитор, blur, тени, бар
 - **wm** — floating WM, зоны, закреп, fullscreen
 - **monitor** — мультимонитор
 - **gpu** — определение GPU, env-переменные
 - **wallpaper** — обои через Imlib2
 - **updater** — автообновление из GitHub
-- **mpris** — медиа-интеграция через D-Bus
-- **panel** — Qt-панель (отдельный процесс)
 - **tools** — установщик, сборка

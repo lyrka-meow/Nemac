@@ -1,44 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
-project(nemac-panel VERSION 0.1.0 LANGUAGES CXX)
+project(nemac-panel LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickControls2)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(DBUS REQUIRED dbus-1)
+find_package(Qt6 REQUIRED COMPONENTS Quick)
 
-set(PANEL_SOURCES
-    main.cpp
-    PanelBridge.cpp
-    MprisBackend.cpp
-    FileModel.cpp
-    WallpaperModel.cpp
-    PackageBackend.cpp
-    TermBackend.cpp
-)
+qt_add_resources(RESOURCES resources.qrc)
 
-qt_add_resources(PANEL_QRC qml.qrc)
-
-add_executable(nemac-panel ${PANEL_SOURCES} ${PANEL_QRC})
-
-target_include_directories(nemac-panel PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${DBUS_INCLUDE_DIRS}
+add_executable(nemac-panel
+    src/main.cpp
+    src/panel.cpp
+    ${RESOURCES}
 )
 
 target_link_libraries(nemac-panel PRIVATE
-    Qt6::Widgets
     Qt6::Quick
-    Qt6::QuickControls2
-    X11
-    ${DBUS_LIBRARIES}
-)
-
-target_compile_options(nemac-panel PRIVATE
-    -Wall -Wextra -O2
-    ${DBUS_CFLAGS_OTHER}
+    xcb
 )
 
 install(TARGETS nemac-panel DESTINATION bin)

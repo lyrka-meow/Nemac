@@ -1,6 +1,8 @@
 #define GLEW_STATIC
 #include "compositor.h"
+#include <X11/extensions/Xrender.h>
 #include <cstdio>
+#include <unistd.h>
 
 void Compositor::add_window(WinInfo& w) {
     Atom actual; int fmt; unsigned long n, after; unsigned char* data = nullptr;
@@ -65,9 +67,76 @@ void Compositor::mark_dirty(Window xwin, std::vector<WinInfo>& wins) {
         if (w.xwin == xwin) { w.dirty = true; break; }
 }
 
+void Compositor::bind_tex(WinInfo& w) {
+    if (!w.texture) {
+        glGenTextures(1, &w.texture);
+        glBindTexture(GL_TEXTURE_2D, w.texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, w.texture);
+    }
+}
+
 void Compositor::update_texture(WinInfo& w) {
-    if (!w.dirty || !_fbc_ok) return;
+    if (!w.dirty) return;
     w.dirty = false;
+
+    if (_nvidia) {
+        Pixmap pix = XCompositeNameWindowPixmap(_dpy, w.xwin);
+        if (!pix) return;
+        glXWaitX();
+        XImage* img = XGetImage(_dpy, pix, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
+        XFreePixmap(_dpy, pix);
+        if (!img) return;
+
+        bool all_black = true;
+        int bpp = img->bits_per_pixel / 8;
+        int stride = img->bytes_per_line;
+        int samples[][2] = {{w.w/4,w.h/4},{w.w/2,w.h/2},{w.w*3/4,w.h*3/4},{w.w/2,w.h/4}};
+        for (auto& s : samples) {
+            unsigned char* p = (unsigned char*)img->data + s[1] * stride + s[0] * bpp;
+            if (p[0] || p[1] || p[2]) { all_black = false; break; }
+        }
+
+        if (all_black && w.w > 1 && w.h > 1 && !w.dock) {
+            w.black_frames++;
+            if (w.black_frames < 30) {
+                XDestroyImage(img);
+                w.dirty = true;
+                return;
+            }
+            XDestroyImage(img);
+            XCompositeUnredirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
+            XSync(_dpy, False);
+            usleep(50000);
+            img = XGetImage(_dpy, w.xwin, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
+            XCompositeRedirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
+            if (!img) return;
+            w.dirty = true;
+        } else {
+            w.black_frames = 0;
+        }
+
+        bind_tex(w);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, img->bytes_per_line / 4);
+        if (w.w != w.pix_w || w.h != w.pix_h) {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w.w, w.h, 0,
+                         GL_BGRA, GL_UNSIGNED_BYTE, img->data);
+            w.pix_w = w.w;
+            w.pix_h = w.h;
+        } else {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w.w, w.h,
+                            GL_BGRA, GL_UNSIGNED_BYTE, img->data);
+        }
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        XDestroyImage(img);
+        return;
+    }
+
+    if (!_fbc_ok) return;
 
     bool need_recreate = !w.glx_pixmap || (w.w != w.pix_w || w.h != w.pix_h);
 
@@ -91,17 +160,7 @@ void Compositor::update_texture(WinInfo& w) {
         w.glx_pixmap = glXCreatePixmap(_dpy, _pix_fbc, w.pixmap, pix_attribs);
         w.pix_w = w.w;
         w.pix_h = w.h;
-
-        if (!w.texture) {
-            glGenTextures(1, &w.texture);
-            glBindTexture(GL_TEXTURE_2D, w.texture);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        } else {
-            glBindTexture(GL_TEXTURE_2D, w.texture);
-        }
+        bind_tex(w);
     } else {
         _releaseTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT);
         glBindTexture(GL_TEXTURE_2D, w.texture);

@@ -12,6 +12,8 @@ struct WinInfo {
     bool   fullscreen = false;
     bool   unmanaged = false;
     bool   desktop   = false;
+    bool   dock      = false;
+    bool   focused   = false;
     int    pre_desk_x = 0, pre_desk_y = 0;
     int    pre_desk_w = 0, pre_desk_h = 0;
 
@@ -23,6 +25,7 @@ struct WinInfo {
     float     opacity    = 1.0f;
     int       pix_w      = 0, pix_h = 0;
     bool      bypass     = false;
+    int       black_frames = 0;
 };
 
 struct Zone {

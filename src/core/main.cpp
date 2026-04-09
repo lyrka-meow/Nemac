@@ -29,6 +29,7 @@ int main() {
     fprintf(stderr, "nemac: запуск v%s\n", NEMAC_VERSION);
     fflush(stderr);
 
+    ensure_session();
     ensure_dirs();
 
     GpuInfo gpu = Gpu::detect();
@@ -46,13 +47,16 @@ int main() {
     XSetErrorHandler(x_error_handler);
 
     auto monitors = Monitor::detect(dpy);
-    int primary_idx = Monitor::find_primary(monitors);
-    auto& pm = monitors[primary_idx];
 
-    Wallpaper::init_defaults(dpy, screen, NEMAC_DATA_DIR);
+    {
+        std::string home = getenv("HOME") ? getenv("HOME") : "";
+        std::string wp = Wallpaper::pick_random(home + "/.local/share/nemac/wallpapers");
+        if (wp.empty() || !Wallpaper::set(dpy, screen, wp, monitors))
+            Wallpaper::init_defaults(dpy, screen, NEMAC_DATA_DIR);
+    }
 
     Compositor* comp = new Compositor(dpy, root, screen);
-    if (!comp->init(pm.width, pm.height, pm.x, pm.y, gpu.nvidia_present)) {
+    if (!comp->init(gpu.nvidia_present)) {
         fprintf(stderr, "nemac: композитор не инициализирован, работа без эффектов\n");
         delete comp;
         comp = nullptr;
@@ -91,9 +95,6 @@ int main() {
     fprintf(stderr, "nemac: все компоненты запущены\n");
     fflush(stderr);
 
-    struct timeval tv_last;
-    gettimeofday(&tv_last, nullptr);
-
     XEvent ev;
     for (;;) {
         int xfd = ConnectionNumber(dpy);
@@ -102,14 +103,6 @@ int main() {
         FD_SET(xfd, &fds);
         struct timeval timeout = {0, 16000};
         select(xfd + 1, &fds, nullptr, nullptr, &timeout);
-
-        struct timeval now;
-        gettimeofday(&now, nullptr);
-        double dt = (now.tv_sec - tv_last.tv_sec) +
-                    (now.tv_usec - tv_last.tv_usec) * 1e-6;
-        tv_last = now;
-
-        if (comp) comp->tick(dt);
 
         while (XPending(dpy)) {
             XNextEvent(dpy, &ev);
@@ -173,14 +166,7 @@ int main() {
                 break;
 
             case ButtonPress:
-                if (comp && ev.xbutton.window == comp->overlay()) {
-                    comp->handle_click(ev.xbutton.x_root, ev.xbutton.y_root);
-                    auto& m = monitors[wm.primary_monitor()];
-                    comp->render(wm.windows(), wm.view_x(), wm.view_y(),
-                                 m.width);
-                } else {
-                    wm.handle_button_press(&ev.xbutton);
-                }
+                wm.handle_button_press(&ev.xbutton);
                 break;
 
             case ButtonRelease:
@@ -199,11 +185,8 @@ int main() {
 
         wm.auto_scroll_tick();
 
-        if (comp) {
-            auto& m = monitors[wm.primary_monitor()];
-            comp->render(wm.windows(), wm.view_x(), wm.view_y(),
-                         m.width);
-        }
+        if (comp)
+            comp->render(wm.windows(), wm.view_x(), wm.view_y());
     }
 
     delete comp;
