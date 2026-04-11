@@ -81,6 +81,8 @@ int main() {
         {MOD,             XK_Up},
         {MOD,             XK_Down},
         {MOD | ShiftMask, XK_q},
+        {MOD | ShiftMask, XK_Left},
+        {MOD | ShiftMask, XK_Right},
     };
     unsigned int extra[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};
     for (auto& b : binds) {
@@ -95,9 +97,10 @@ int main() {
     fprintf(stderr, "nemac: все компоненты запущены\n");
     fflush(stderr);
 
+    int xfd = ConnectionNumber(dpy);
+
     XEvent ev;
     for (;;) {
-        int xfd = ConnectionNumber(dpy);
         fd_set fds;
         FD_ZERO(&fds);
         FD_SET(xfd, &fds);
@@ -185,7 +188,7 @@ int main() {
 
         wm.auto_scroll_tick();
 
-        if (comp)
+        if (comp && comp->needs_render())
             comp->render(wm.windows(), wm.view_x(), wm.view_y());
     }
 

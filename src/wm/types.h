@@ -25,6 +25,7 @@ struct WinInfo {
     float     opacity    = 1.0f;
     int       pix_w      = 0, pix_h = 0;
     bool      bypass     = false;
+    bool      needs_unredirect = false;
     int       black_frames = 0;
 };
 

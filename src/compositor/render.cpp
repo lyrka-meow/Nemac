@@ -1,16 +1,11 @@
 #define GLEW_STATIC
 #include "compositor.h"
-#include <sys/time.h>
 
 void Compositor::render(std::vector<WinInfo>& wins,
                         int view_x, int view_y)
 {
     if (!_ok) return;
-
-    struct timeval _rnow; gettimeofday(&_rnow, nullptr);
-    double _rt = _rnow.tv_sec + _rnow.tv_usec * 1e-6;
-    if (_rt - _last_render_t < 0.033) return;
-    _last_render_t = _rt;
+    _frame_dirty = false;
 
     glXMakeCurrent(_dpy, _glxwin, _ctx);
     glViewport(0, 0, _rw, _rh);

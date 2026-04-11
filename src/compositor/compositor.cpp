@@ -199,11 +199,11 @@ bool Compositor::init(bool nvidia) {
     auto glXSwapIntervalEXT_fn = (PFNGLXSWAPINTERVALEXTPROC)
         glXGetProcAddressARB((const GLubyte*)"glXSwapIntervalEXT");
     if (glXSwapIntervalEXT_fn)
-        glXSwapIntervalEXT_fn(_dpy, _glxwin, 0);
+        glXSwapIntervalEXT_fn(_dpy, _glxwin, 1);
     else {
         auto glXSwapIntervalMESA_fn = (PFNGLXSWAPINTERVALMESAPROC)
             glXGetProcAddressARB((const GLubyte*)"glXSwapIntervalMESA");
-        if (glXSwapIntervalMESA_fn) glXSwapIntervalMESA_fn(0);
+        if (glXSwapIntervalMESA_fn) glXSwapIntervalMESA_fn(1);
     }
 
     float dummy[24] = {};

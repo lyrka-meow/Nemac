@@ -29,7 +29,6 @@ target_link_libraries(nemac PRIVATE
     GL
     GLEW
     Imlib2
-    Xrender
 )
 
 target_compile_options(nemac PRIVATE

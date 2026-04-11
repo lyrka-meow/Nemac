@@ -17,6 +17,8 @@ public:
 
     void render(std::vector<WinInfo>& wins,
                 int view_x, int view_y);
+    bool needs_render() const { return _frame_dirty; }
+    void request_render() { _frame_dirty = true; }
 
     int  damage_event   = 0;
     Atom opacity_atom   = None;
@@ -69,5 +71,5 @@ private:
     PFNGLXBINDTEXIMAGEEXTPROC    _bindTex    = nullptr;
     PFNGLXRELEASETEXIMAGEEXTPROC _releaseTex = nullptr;
 
-    double _last_render_t = 0.0;
+    bool _frame_dirty = true;
 };

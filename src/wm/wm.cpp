@@ -277,6 +277,8 @@ void WM::auto_scroll_tick() {
         if (wi.unmanaged) continue;
         XMoveWindow(_dpy, wi.xwin, wi.x - _view_x, wi.y - _view_y);
     }
+    if (_comp)
+        _comp->request_render();
 }
 
 void WM::switch_primary(int dir) {
@@ -284,7 +286,23 @@ void WM::switch_primary(int dir) {
     _primary = (_primary + dir + (int)_monitors.size()) % (int)_monitors.size();
     for (auto& m : _monitors) m.primary = false;
     _monitors[_primary].primary = true;
-    fprintf(stderr, "nemac: главный монитор -> %d\n", _primary);
+
+    auto& m = _monitors[_primary];
+    for (auto& w : _wins) {
+        if (!w.dock) continue;
+        if (w.w >= m.width || w.w >= 800) {
+            w.x = m.x;
+            w.y = m.y;
+            w.w = m.width;
+        } else {
+            w.x = m.x + m.width - w.w - 8;
+            w.y = m.y + 40;
+        }
+        XMoveResizeWindow(_dpy, w.xwin, w.x, w.y, w.w, w.h);
+        w.dirty = true;
+    }
+
+    recalc_workarea();
     layout();
 }
 
@@ -311,7 +329,7 @@ void WM::layout() {
     }
 
     if (_comp)
-        _comp->render(_wins, _view_x, _view_y);
+        _comp->request_render();
     XFlush(_dpy);
 }
 
@@ -401,13 +419,26 @@ void WM::handle_destroy(Window w) {
     _wins.erase(_wins.begin() + idx);
     if (was_dock) {
         _strut_top = 0;
+        Atom strut_atom = XInternAtom(_dpy, "_NET_WM_STRUT_PARTIAL", False);
+        for (auto& dw : _wins) {
+            if (!dw.dock) continue;
+            Atom actual; int fmt;
+            unsigned long n, left;
+            unsigned char* data = nullptr;
+            if (XGetWindowProperty(_dpy, dw.xwin, strut_atom, 0, 12, False,
+                                   XA_CARDINAL, &actual, &fmt, &n, &left, &data) == Success && data && n >= 10) {
+                long* vals = (long*)data;
+                if ((int)vals[2] > _strut_top) _strut_top = (int)vals[2];
+                XFree(data);
+            } else if (data) XFree(data);
+        }
         recalc_workarea();
         layout();
         return;
     }
     if (was_unmanaged) {
         if (_comp)
-            _comp->render(_wins, _view_x, _view_y);
+            _comp->request_render();
         return;
     }
     if (_focused > idx) _focused--;
@@ -433,6 +464,8 @@ void WM::handle_key(XKeyEvent* e) {
     }
     if (mod == (MOD | ShiftMask)) {
         if (sym == XK_q)      { XCloseDisplay(_dpy); exit(0); }
+        if (sym == XK_Left)   { switch_primary(-1); return; }
+        if (sym == XK_Right)  { switch_primary(1); return; }
     }
 }
 
@@ -533,16 +566,8 @@ void WM::handle_motion(XMotionEvent* e) {
         } else {
             XMoveWindow(_dpy, w.xwin, w.x - _view_x, w.y - _view_y);
         }
-        if (_comp) {
-            static struct timeval lm = {0, 0};
-            struct timeval now;
-            gettimeofday(&now, nullptr);
-            double el = (now.tv_sec - lm.tv_sec) + (now.tv_usec - lm.tv_usec) * 1e-6;
-            if (el >= 0.016) {
-                _comp->render(_wins, _view_x, _view_y);
-                lm = now;
-            }
-        }
+        if (_comp)
+            _comp->request_render();
         return;
     }
 
@@ -561,16 +586,8 @@ void WM::handle_motion(XMotionEvent* e) {
         w.x = nx; w.y = ny; w.w = nw; w.h = nh;
         XMoveResizeWindow(_dpy, w.xwin, nx - _view_x, ny - _view_y, nw, nh);
         update_zones();
-        if (_comp) {
-            static struct timeval lr = {0, 0};
-            struct timeval now;
-            gettimeofday(&now, nullptr);
-            double el = (now.tv_sec - lr.tv_sec) + (now.tv_usec - lr.tv_usec) * 1e-6;
-            if (el >= 0.016) {
-                _comp->render(_wins, _view_x, _view_y);
-                lr = now;
-            }
-        }
+        if (_comp)
+            _comp->request_render();
     }
 }
 
