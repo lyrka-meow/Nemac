@@ -86,51 +86,12 @@ void Compositor::update_texture(WinInfo& w) {
     w.dirty = false;
 
     if (_nvidia) {
-        XImage* img = nullptr;
-
-        if (w.needs_unredirect) {
-            XCompositeUnredirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
-            XSync(_dpy, False);
-            img = XGetImage(_dpy, w.xwin, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
-            XCompositeRedirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
-            if (!img) return;
-        } else {
-            Pixmap pix = XCompositeNameWindowPixmap(_dpy, w.xwin);
-            if (!pix) return;
-            glXWaitX();
-            img = XGetImage(_dpy, pix, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
-            XFreePixmap(_dpy, pix);
-            if (!img) return;
-
-            if (w.w > 1 && w.h > 1 && !w.dock) {
-                bool all_black = true;
-                int bpp = img->bits_per_pixel / 8;
-                int stride = img->bytes_per_line;
-                int samples[][2] = {{w.w/4,w.h/4},{w.w/2,w.h/2},{w.w*3/4,w.h*3/4},{w.w/2,w.h/4}};
-                for (auto& s : samples) {
-                    unsigned char* p = (unsigned char*)img->data + s[1] * stride + s[0] * bpp;
-                    if (p[0] || p[1] || p[2]) { all_black = false; break; }
-                }
-                if (all_black) {
-                    w.black_frames++;
-                    if (w.black_frames < 30) {
-                        XDestroyImage(img);
-                        w.dirty = true;
-                        return;
-                    }
-                    XDestroyImage(img);
-                    w.needs_unredirect = true;
-                    XCompositeUnredirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
-                    XSync(_dpy, False);
-                    usleep(50000);
-                    img = XGetImage(_dpy, w.xwin, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
-                    XCompositeRedirectWindow(_dpy, w.xwin, CompositeRedirectAutomatic);
-                    if (!img) return;
-                } else {
-                    w.black_frames = 0;
-                }
-            }
-        }
+        Pixmap pix = XCompositeNameWindowPixmap(_dpy, w.xwin);
+        if (!pix) return;
+        glXWaitX();
+        XImage* img = XGetImage(_dpy, pix, 0, 0, w.w, w.h, AllPlanes, ZPixmap);
+        XFreePixmap(_dpy, pix);
+        if (!img) return;
 
         bind_tex(w);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, img->bytes_per_line / 4);
@@ -148,35 +109,50 @@ void Compositor::update_texture(WinInfo& w) {
         return;
     }
 
-    if (!_fbc_ok) return;
-
-    bool need_recreate = !w.glx_pixmap || (w.w != w.pix_w || w.h != w.pix_h);
+    bool need_recreate = (w.w != w.pix_w || w.h != w.pix_h);
 
     if (need_recreate) {
         if (w.glx_pixmap) {
             _releaseTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT);
-            glXDestroyPixmap(_dpy, w.glx_pixmap);
-            w.glx_pixmap = None;
+            glXDestroyPixmap(_dpy, w.glx_pixmap); w.glx_pixmap = None;
         }
         if (w.pixmap) { XFreePixmap(_dpy, w.pixmap); w.pixmap = None; }
 
         w.pixmap = XCompositeNameWindowPixmap(_dpy, w.xwin);
         if (!w.pixmap) return;
 
-        int pix_attribs[] = {
-            GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
-            GLX_TEXTURE_FORMAT_EXT, _pix_rgba ? GLX_TEXTURE_FORMAT_RGBA_EXT
-                                              : GLX_TEXTURE_FORMAT_RGB_EXT,
-            None
-        };
-        w.glx_pixmap = glXCreatePixmap(_dpy, _pix_fbc, w.pixmap, pix_attribs);
-        w.pix_w = w.w;
-        w.pix_h = w.h;
-        bind_tex(w);
-    } else {
-        _releaseTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT);
-        glBindTexture(GL_TEXTURE_2D, w.texture);
+        XWindowAttributes wa;
+        bool has_alpha = false;
+        if (XGetWindowAttributes(_dpy, w.xwin, &wa)) {
+            VisualID vid = XVisualIDFromVisual(wa.visual);
+            auto it = _vis_fbc.find(vid);
+            if (it != _vis_fbc.end()) {
+                has_alpha = it->second.rgba;
+                int pix_attribs[] = {
+                    GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
+                    GLX_TEXTURE_FORMAT_EXT, has_alpha
+                        ? GLX_TEXTURE_FORMAT_RGBA_EXT
+                        : GLX_TEXTURE_FORMAT_RGB_EXT,
+                    None
+                };
+                w.glx_pixmap = glXCreatePixmap(_dpy, it->second.fbc,
+                                               w.pixmap, pix_attribs);
+            }
+        }
+
+        w.pix_w = w.w; w.pix_h = w.h;
+        if (w.glx_pixmap) {
+            bind_tex(w);
+            if (!has_alpha)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
+            _bindTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT, nullptr);
+        }
+        return;
     }
 
-    _bindTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT, nullptr);
+    if (w.glx_pixmap) {
+        _releaseTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT);
+        glBindTexture(GL_TEXTURE_2D, w.texture);
+        _bindTex(_dpy, w.glx_pixmap, GLX_FRONT_LEFT_EXT, nullptr);
+    }
 }

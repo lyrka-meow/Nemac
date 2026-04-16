@@ -387,6 +387,20 @@ void WM::handle_map_request(XMapRequestEvent* e) {
     nw.x = m.x + (m.width - nw.w) / 2;
     nw.y = m.y + _strut_top + (m.height - _strut_top - nw.h) / 2;
 
+    XClassHint cls = {};
+    if (XGetClassHint(_dpy, e->window, &cls)) {
+        if (cls.res_class) {
+            const char* c = cls.res_class;
+            if (!strcmp(c, "chromium") || !strcmp(c, "Chromium") ||
+                !strcmp(c, "Chromium-browser") ||
+                !strcmp(c, "Google-chrome") || !strcmp(c, "google-chrome") ||
+                !strcmp(c, "Brave-browser") || !strcmp(c, "brave-browser"))
+                nw.gpu_app = true;
+            XFree(cls.res_class);
+        }
+        if (cls.res_name) XFree(cls.res_name);
+    }
+
     _wins.push_back(nw);
 
     XSetWindowBorderWidth(_dpy, e->window, 0);

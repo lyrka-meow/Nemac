@@ -26,7 +26,9 @@ struct WinInfo {
     int       pix_w      = 0, pix_h = 0;
     bool      bypass     = false;
     bool      needs_unredirect = false;
+    bool      gpu_app = false;
     int       black_frames = 0;
+    int       gpu_frames = 0;
 };
 
 struct Zone {

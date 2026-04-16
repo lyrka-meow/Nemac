@@ -2,6 +2,30 @@
 #include "compositor.h"
 #include "shaders.h"
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <sys/stat.h>
+
+static void ensure_gpu_compositing_flag(const char* filename) {
+    const char* home = getenv("HOME");
+    if (!home) return;
+    char path[512];
+    snprintf(path, sizeof(path), "%s/.config/%s", home, filename);
+    const char* flag = "--disable-gpu-compositing";
+    FILE* f = fopen(path, "r");
+    if (f) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), f)) {
+            if (strstr(buf, flag)) { fclose(f); return; }
+        }
+        fclose(f);
+        f = fopen(path, "a");
+        if (f) { fprintf(f, "%s\n", flag); fclose(f); }
+    } else {
+        f = fopen(path, "w");
+        if (f) { fprintf(f, "%s\n", flag); fclose(f); }
+    }
+}
 
 Compositor::Compositor(Display* dpy, Window root, int screen)
     : _dpy(dpy), _root(root), _screen(screen)
@@ -28,6 +52,12 @@ bool Compositor::init(bool nvidia) {
     _rh = DisplayHeight(_dpy, _screen);
     fprintf(stderr, "nemac: композитор %dx%d nvidia=%d\n", _rw, _rh, _nvidia);
     fflush(stderr);
+
+    if (_nvidia) {
+        ensure_gpu_compositing_flag("chromium-flags.conf");
+        ensure_gpu_compositing_flag("chrome-flags.conf");
+        ensure_gpu_compositing_flag("brave-flags.conf");
+    }
     int ev, er;
 
     if (!XCompositeQueryExtension(_dpy, &ev, &er)) {
@@ -83,17 +113,11 @@ bool Compositor::init(bool nvidia) {
         if (vi && vi->visualid == ov_vid) {
             ov_fbc = ov_fbcs[i];
             XFree(vi);
-            fprintf(stderr, "nemac: FBConfig #%d совпал с overlay visual\n", i);
-            fflush(stderr);
             break;
         }
         if (vi) XFree(vi);
     }
-    if (!ov_fbc) {
-        fprintf(stderr, "nemac: точное совпадение не найдено, пробуем первый FBConfig\n");
-        fflush(stderr);
-        ov_fbc = ov_fbcs[0];
-    }
+    if (!ov_fbc) ov_fbc = ov_fbcs[0];
     XFree(ov_fbcs);
 
     _ctx = glXCreateNewContext(_dpy, ov_fbc, GLX_RGBA_TYPE, nullptr, True);
@@ -123,58 +147,38 @@ bool Compositor::init(bool nvidia) {
     {
         int all_nfbc = 0;
         GLXFBConfig* all_fbcs = glXGetFBConfigs(_dpy, _screen, &all_nfbc);
-        if (!all_fbcs || all_nfbc == 0) {
-            fprintf(stderr, "nemac: нет FBConfig вообще\n");
-            return false;
-        }
-        fprintf(stderr, "nemac: всего FBConfig: %d\n", all_nfbc);
-        fprintf(stderr, "nemac: константы: BIND_RGBA=0x%x BIND_RGB=0x%x TGT=0x%x 2D_BIT=0x%x PIX_BIT=0x%x\n",
-                GLX_BIND_TO_TEXTURE_RGBA_EXT, GLX_BIND_TO_TEXTURE_RGB_EXT,
-                GLX_BIND_TO_TEXTURE_TARGETS_EXT, GLX_TEXTURE_2D_BIT_EXT, GLX_PIXMAP_BIT);
-        fflush(stderr);
-
-        _pix_fbc = nullptr;
-        _pix_rgba = false;
-        _fbc_ok = false;
-        int dbg_count = 0;
-        for (int i = 0; i < all_nfbc; i++) {
-            int draw = 0, bind_rgba = 0, bind_rgb = 0, tgt = 0;
-            int r = 0, g = 0, b = 0, a = 0, dbl = 0;
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_DRAWABLE_TYPE, &draw);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_BIND_TO_TEXTURE_RGBA_EXT, &bind_rgba);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_BIND_TO_TEXTURE_RGB_EXT, &bind_rgb);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_BIND_TO_TEXTURE_TARGETS_EXT, &tgt);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_RED_SIZE, &r);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_GREEN_SIZE, &g);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_BLUE_SIZE, &b);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_ALPHA_SIZE, &a);
-            glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_DOUBLEBUFFER, &dbl);
-            if (dbg_count < 3 && (draw & GLX_PIXMAP_BIT) && r >= 8) {
-                fprintf(stderr, "nemac: dbg #%d draw=0x%x r=%d g=%d b=%d a=%d dbl=%d "
-                        "bind_rgba=%d bind_rgb=%d tgt=0x%x\n",
-                        i, draw, r, g, b, a, dbl, bind_rgba, bind_rgb, tgt);
-                dbg_count++;
+        fprintf(stderr, "nemac: total FBConfigs: %d\n", all_nfbc);
+        if (all_fbcs && all_nfbc > 0) {
+            for (int pass = 0; pass < 2; pass++) {
+                for (int i = 0; i < all_nfbc; i++) {
+                    int draw = 0, r = 0, g = 0, b = 0, a = 0, dbl = 0;
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_DRAWABLE_TYPE, &draw);
+                    if (!(draw & GLX_PIXMAP_BIT)) continue;
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_DOUBLEBUFFER, &dbl);
+                    if (pass == 0 && dbl) continue;
+                    if (pass == 1 && !dbl) continue;
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_RED_SIZE, &r);
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_GREEN_SIZE, &g);
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_BLUE_SIZE, &b);
+                    glXGetFBConfigAttrib(_dpy, all_fbcs[i], GLX_ALPHA_SIZE, &a);
+                    if (r < 8 || g < 8 || b < 8) continue;
+                    XVisualInfo* vi = glXGetVisualFromFBConfig(_dpy, all_fbcs[i]);
+                    if (vi) {
+                        if (_vis_fbc.find(vi->visualid) == _vis_fbc.end()) {
+                            bool has_alpha = (a > 0);
+                            _vis_fbc[vi->visualid] = {all_fbcs[i], has_alpha, false};
+                            fprintf(stderr, "nemac: tfp visual 0x%lx depth=%d alpha=%d dbl=%d\n",
+                                    vi->visualid, vi->depth, a, dbl);
+                        }
+                        XFree(vi);
+                    }
+                }
             }
-            if (!(draw & GLX_PIXMAP_BIT)) continue;
-            if (!(tgt & GLX_TEXTURE_2D_BIT_EXT)) continue;
-            if (!bind_rgba && !bind_rgb) continue;
-            if (r < 8 || g < 8 || b < 8) continue;
-            _pix_fbc = all_fbcs[i];
-            _pix_rgba = bind_rgba ? true : false;
-            _fbc_ok = true;
-            fprintf(stderr, "nemac: texture-from-pixmap: FBConfig #%d rgba=%d/%d/%d/%d bind=%s\n",
-                    i, r, g, b, a, _pix_rgba ? "RGBA" : "RGB");
-            fflush(stderr);
-            break;
+            XFree(all_fbcs);
         }
-        XFree(all_fbcs);
-        if (!_fbc_ok) {
-            fprintf(stderr, "nemac: нет FBConfig для texture-from-pixmap (проверено %d)\n", all_nfbc);
-            fflush(stderr);
-            return false;
-        }
+        fprintf(stderr, "nemac: texture-from-pixmap: %d visuals mapped\n", (int)_vis_fbc.size());
+        fflush(stderr);
     }
-    fflush(stderr);
 
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,

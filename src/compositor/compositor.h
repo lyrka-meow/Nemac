@@ -3,6 +3,7 @@
 #include <X11/extensions/Xcomposite.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/shape.h>
+#include <unordered_map>
 
 class Compositor {
 public:
@@ -49,9 +50,8 @@ private:
 
     int  _rw = 0, _rh = 0;
 
-    GLXFBConfig _pix_fbc  = nullptr;
-    bool        _fbc_ok   = false;
-    bool        _pix_rgba = true;
+    struct PixFBC { GLXFBConfig fbc; bool rgba; bool y_inv; };
+    std::unordered_map<VisualID, PixFBC> _vis_fbc;
     bool        _ok       = false;
     bool        _nvidia   = false;
 
